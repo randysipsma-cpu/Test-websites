@@ -1,0 +1,3 @@
+Nieuwe veilige publicatiecontrole vanuit ChatGPT.
+Branch: test/chatgpt-ontwikkeling
+Productiebranch main blijft ongewijzigd.
