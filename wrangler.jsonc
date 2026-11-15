@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "test-websites-myhub-preview",
+  "name": "test-websites",
   "compatibility_date": "2026-11-15",
   "assets": {
     "directory": "./"
