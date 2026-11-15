@@ -3,7 +3,6 @@
   "name": "test-websites-myhub-preview",
   "compatibility_date": "2026-11-15",
   "assets": {
-    "directory": "./",
-    "binding": "ASSETS"
+    "directory": "./"
   }
 }
