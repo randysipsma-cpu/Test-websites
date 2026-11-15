@@ -2,7 +2,11 @@
   "name": "mijn-radio-preview",
   "compatibility_date": "2026-11-15",
   "assets": {
-    "directory": "./mijn-radio"
+    "directory": "./mijn-radio",
+    "run_worker_first": [
+      "/api/*"
+    ]
   },
-  "previews": {}
+  "previews": {},
+  "main": "./mijn-radio/worker.js"
 }
