@@ -48,7 +48,7 @@ let tileMode=localStorage.getItem(TILES_KEY)==='1',alarm=null,albumCache={};
 try{alarm=JSON.parse(localStorage.getItem(ALARM_KEY)||'null')}catch{}
 try{albumCache=JSON.parse(localStorage.getItem(ART_KEY)||'{}')||{}}catch{}
 $('tilesToggle').checked=tileMode;
-$('tilesToggle').onchange=()=>{tileMode=$('tilesToggle').checked;saveExtra(TILES_KEY,tileMode?'1':'0');render()};
+$('tilesToggle').onchange=()=>{tileMode=$('tilesToggle').checked;localStorage.setItem(TILES_KEY,tileMode?'1':'0');render()};
 function skipStation(step){const list=saved.filter(x=>safeUrl(x.url));if(!list.length)return;const i=list.findIndex(x=>x.url===current?.url);selectStation(list[i<0?0:(i+step+list.length)%list.length])}
 $('prevStation').onclick=()=>skipStation(-1);$('nextStation').onclick=()=>skipStation(1);$('miniPrev').onclick=()=>skipStation(-1);$('miniNext').onclick=()=>skipStation(1);
 $('miniPlay').onclick=()=>{if(!current)return;if(audio.paused)play();else audio.pause()};
