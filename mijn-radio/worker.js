@@ -64,7 +64,7 @@ async function verifyPublicStream(url){
   if(response.status>=300&&response.status<400)return false;
   const type=String(response.headers.get('content-type')||'').toLowerCase();
   const icy=response.headers.has('icy-metaint')||response.headers.has('icy-name');
-  const audioType=/^(audio\\/|application\\/(?:ogg|vnd\\.apple\\.mpegurl|x-mpegurl|octet-stream))/.test(type);
+  const audioType=/^(audio\/|application\/(?:ogg|vnd\.apple\.mpegurl|x-mpegurl|octet-stream))/.test(type);
   const ok=response.ok&&(icy||audioType);
   try{await response.body?.cancel()}catch{}
   return ok;
