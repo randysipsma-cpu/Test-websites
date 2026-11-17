@@ -191,7 +191,49 @@ for(const [id,key] of [['homeShowRecent','recent'],['homeShowFavorites','favorit
 const BACKUP_KEYS=['mijn-radio-v1','mijn-radio-history-v1','mijn-radio-tiles-v1','mijn-radio-recent-stations-v1','mijn-radio-home-preferences-v1'];
 $('backupExport').onclick=()=>{try{const payload={format:'mijn-radio-backup-v1',createdAt:new Date().toISOString(),stations:saved,history:history,preferences:Object.fromEntries(BACKUP_KEYS.slice(2).map(k=>[k,localStorage.getItem(k)]))};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='mijn-radio-backup-'+new Date().toISOString().slice(0,10)+'.json';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);$('backupStatus').textContent='Back-upbestand aangemaakt. Bewaar het op een veilige plek.'}catch(e){$('backupStatus').textContent='Back-up maken mislukt: '+e.message}};
 $('backupImport').onclick=()=>{$('backupFile').value='';$('backupFile').click()};
-$('backupFile').onchange=async()=>{const file=$('backupFile').files?.[0];if(!file)return;try{if(file.size>15*1024*1024)throw Error('Bestand te groot (maximaal 15 MB).');const data=JSON.parse(await file.text());if(data?.format!=='mijn-radio-backup-v1'||!Array.isArray(data.stations)||!Array.isArray(data.history)||!data.preferences||typeof data.preferences!=='object')throw Error('Ongeldig Mijn Radio-back-upbestand.');if(data.stations.length>5000||data.history.length>100000)throw Error('Back-up bevat te veel gegevens.');const stations=data.stations.map(x=>{if(!x||typeof x.name!=='string'||typeof x.url!=='string'||!safeUrl(x.url)||x.name.length>80)throw Error('Ongeldige zender in back-up.');return {id:typeof x.id==='string'?x.id:crypto.randomUUID(),name:x.name,url:x.url,logo:typeof x.logo==='string'&&safeUrl(x.logo)?x.logo:'',custom:!!x.custom}});const entries=data.history.map(x=>{if(!x||typeof x.title!=='string'||typeof x.station!=='string'||!Number.isFinite(x.time)||typeof x.stationUrl!=='string')throw Error('Ongeldige luistergeschiedenis.');return {id:typeof x.id==='string'?x.id:crypto.randomUUID(),raw:String(x.raw||x.title),title:x.title,artist:String(x.artist||''),station:x.station,stationUrl:x.stationUrl,time:x.time,favorite:!!x.favorite}});const prefs={};for(const key of BACKUP_KEYS.slice(2)){const v=data.preferences[key];if(v!==null&&v!==undefined&&typeof v!=='string')throw Error('Ongeldige instelling.');if(typeof v==='string'&&v.length>200000)throw Error('Instelling te groot.');prefs[key]=v}if(!confirm('Back-up herstellen? Je huidige zenders, luistergeschiedenis en voorkeuren worden vervangen. Spotify blijft gekoppeld.'))return;const old=Object.fromEntries(BACKUP_KEYS.map(k=>[k,localStorage.getItem(k)])),previousHistory=history;try{localStorage.setItem(KEY,JSON.stringify(stations));localStorage.setItem(HISTORY_KEY,JSON.stringify(entries));for(const [key,value] of Object.entries(prefs)){if(value===null||value===undefined)localStorage.removeItem(key);else localStorage.setItem(key,value)}if(historyReady)await historyDbWrite(entries,true);saved=stations;history=entries;$('backupStatus').textContent='Hersteld. De app wordt opnieuw geladen.';location.reload()}catch(e){for(const [key,value] of Object.entries(old)){if(value===null)localStorage.removeItem(key);else localStorage.setItem(key,value)}history=previousHistory;throw e}}catch(e){$('backupStatus').textContent='Herstellen mislukt: '+e.message}}};
+$('backupFile').onchange=async()=>{
+ const file=$('backupFile').files?.[0];if(!file)return;
+ try{
+  if(file.size>15*1024*1024)throw Error('Bestand te groot (maximaal 15 MB).');
+  const data=JSON.parse(await file.text());
+  if(data?.format!=='mijn-radio-backup-v1'||!Array.isArray(data.stations)||!Array.isArray(data.history)||!data.preferences||typeof data.preferences!=='object')throw Error('Ongeldig Mijn Radio-back-upbestand.');
+  if(data.stations.length>5000||data.history.length>100000)throw Error('Back-up bevat te veel gegevens.');
+  const stations=data.stations.map(x=>{
+   if(!x||typeof x.name!=='string'||typeof x.url!=='string'||!safeUrl(x.url)||x.name.length>80)throw Error('Ongeldige zender in back-up.');
+   return {id:typeof x.id==='string'?x.id:crypto.randomUUID(),name:x.name,url:x.url,logo:typeof x.logo==='string'&&safeUrl(x.logo)?x.logo:'',custom:!!x.custom};
+  });
+  const entries=data.history.map(x=>{
+   if(!x||typeof x.title!=='string'||typeof x.station!=='string'||!Number.isFinite(x.time)||typeof x.stationUrl!=='string')throw Error('Ongeldige luistergeschiedenis.');
+   return {id:typeof x.id==='string'?x.id:crypto.randomUUID(),raw:String(x.raw||x.title),title:x.title,artist:String(x.artist||''),station:x.station,stationUrl:x.stationUrl,time:x.time,favorite:!!x.favorite};
+  });
+  const prefs={};
+  for(const key of BACKUP_KEYS.slice(2)){
+   const v=data.preferences[key];
+   if(v!==null&&v!==undefined&&typeof v!=='string')throw Error('Ongeldige instelling.');
+   if(typeof v==='string'&&v.length>200000)throw Error('Instelling te groot.');
+   prefs[key]=v;
+  }
+  if(!confirm('Back-up herstellen? Je huidige zenders, luistergeschiedenis en voorkeuren worden vervangen. Spotify blijft gekoppeld.'))return;
+  const old=Object.fromEntries(BACKUP_KEYS.map(k=>[k,localStorage.getItem(k)]));
+  const previousHistory=history;
+  try{
+   localStorage.setItem(KEY,JSON.stringify(stations));
+   localStorage.setItem(HISTORY_KEY,JSON.stringify(entries));
+   for(const [key,value] of Object.entries(prefs)){
+    if(value===null||value===undefined)localStorage.removeItem(key);else localStorage.setItem(key,value);
+   }
+   if(historyReady)await historyDbWrite(entries);
+   saved=stations;history=entries;
+   $('backupStatus').textContent='Hersteld. De app wordt opnieuw geladen.';
+   location.reload();
+  }catch(e){
+   for(const [key,value] of Object.entries(old)){
+    if(value===null)localStorage.removeItem(key);else localStorage.setItem(key,value);
+   }
+   history=previousHistory;throw e;
+  }
+ }catch(e){$('backupStatus').textContent='Herstellen mislukt: '+e.message;}
+};
 function openSettings(section='general'){const dialog=$('settingsDialog');showSettingsSection(section);if(!dialog.open)dialog.showModal()}
 function showSettingsSection(section){for(const name of ['general','spotify','diagnostics']){$('settings'+name[0].toUpperCase()+name.slice(1)).hidden=name!==section}for(const button of document.querySelectorAll('[data-settings-section]')){const active=button.dataset.settingsSection===section;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active))}if(section==='spotify')spotifyUpdateUI();if(section==='diagnostics')$('metadataDiagnostic').textContent=lastMetadataDiagnostic}
 $('openSettings').onclick=()=>openSettings();$('closeSettings').onclick=()=>$('settingsDialog').close();$('settingsStreamDiagnose').onclick=()=>{$('settingsDialog').close();$('diagnoseDialog').showModal()};for(const button of document.querySelectorAll('[data-settings-section]'))button.onclick=()=>showSettingsSection(button.dataset.settingsSection);
