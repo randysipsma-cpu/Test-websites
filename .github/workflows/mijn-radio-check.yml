@@ -1,0 +1,21 @@
+name: Mijn Radio regressiecontrole
+on:
+  push:
+    branches: [feature/mijn-radio]
+    paths:
+      - 'mijn-radio/**'
+      - '.github/workflows/mijn-radio-check.yml'
+  pull_request:
+    paths:
+      - 'mijn-radio/**'
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Controleer Mijn Radio
+        run: node mijn-radio/check.mjs
