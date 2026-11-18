@@ -1,6 +1,6 @@
 {
-  "name": "Sound Cue",
-  "short_name": "Sound Cue",
+  "name": "Soundcue",
+  "short_name": "Soundcue",
   "description": "Cue-board voor orkestbanden",
   "start_url": "./index.html",
   "scope": "./",
