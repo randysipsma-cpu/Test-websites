@@ -1,6 +1,6 @@
 {
-  "name": "Mijn Orkestbanden",
-  "short_name": "Orkestbanden",
+  "name": "Sound Cue",
+  "short_name": "Sound Cue",
   "description": "Cue-board voor orkestbanden",
   "start_url": "./index.html",
   "scope": "./",
@@ -8,5 +8,13 @@
   "background_color": "#101015",
   "theme_color": "#19191f",
   "orientation": "any",
-  "lang": "nl"
+  "lang": "nl",
+  "icons": [
+    {
+      "src": "./soundcue-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }
