@@ -1,8 +1,8 @@
 {
-  "name": "test-websites-preview",
+  "name": "mijn-orkestbanden-preview",
   "compatibility_date": "2026-11-18",
   "assets": {
-    "directory": "."
+    "directory": "./mijn-orkestbanden"
   },
   "previews": {}
 }
