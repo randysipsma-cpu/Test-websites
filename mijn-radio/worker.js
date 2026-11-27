@@ -1,3 +1,4 @@
+import {parseIcyBlock} from './metadata-icy.mjs';
 import {readStationApi} from './metadata-station-api.mjs';
 import {resolvePlaylist} from './metadata-playlists.mjs';
 import {extractOggMetadata} from './metadata-ogg.mjs';
@@ -15,7 +16,7 @@ async function icyNowPlaying(streamUrl){
   if(!Number.isInteger(interval)||interval<1||interval>262144)return {status:'unsupported',source:'icy',code:'icy_header_missing',message:'Deze stream biedt geen ICY-metadatablokken aan.'};
   reader=response.body.getReader();
   let buffer=new Uint8Array(0),readBytes=0,empty=0,blocks=0;
-  const maxBytes=Math.min(1600000,Math.max(interval*5+20480,327680));
+  const maxBytes=Math.min(1600000,Math.max(interval*24+98304,327680));
   async function take(count){
    while(buffer.length<count){
     if(readBytes>=maxBytes)return null;
@@ -26,18 +27,17 @@ async function icyNowPlaying(streamUrl){
    }
    const part=buffer.subarray(0,count);buffer=buffer.slice(count);return part;
   }
-  for(let i=0;i<5;i++){
+  for(let i=0;i<24;i++){
    if(!await take(interval))break;
    const len=await take(1);if(!len)break;
    blocks++;const size=len[0]*16;
    if(!size){empty++;continue}
    const bytes=await take(size);if(!bytes)break;
-   const raw=new TextDecoder('utf-8').decode(bytes).replace(/\0+$/g,'');
-   const match=raw.match(/StreamTitle=(['"])(.*?)\1(?:;|$)/i);
-   const title=match?.[2]?.trim();
-   if(title)return {status:'ok',source:'icy',title:title.slice(0,200),blocksChecked:blocks};
+   const {raw,title}=parseIcyBlock(bytes);
+   if(title)return {status:'ok',source:'icy',title,rawMetadata:raw,blocksChecked:blocks,format:response.headers.get('content-type'),platform:response.headers.get('server'),icyInterval:interval};
+
   }
-  return {status:'unavailable',source:'icy',code:empty===blocks?'empty_icy_blocks':'no_stream_title',blocksChecked:blocks,message:blocks?'Geen actuele titel gevonden in '+blocks+' opeenvolgende ICY-blokken.':'Geen volledig ICY-metadatablok ontvangen.'};
+  return {status:'unavailable',source:'icy',code:blocks&&empty===blocks?'empty_icy_blocks':'no_stream_title',blocksChecked:blocks,message:blocks?'Geen actuele titel gevonden in '+blocks+' opeenvolgende ICY-blokken.':'Geen volledig ICY-metadatablok ontvangen.'};
  }finally{clearTimeout(timer);try{await reader?.cancel()}catch{}}
 }
 // Generic metadata adapters. Only probe the already-verified stream origin; never follow redirects.
