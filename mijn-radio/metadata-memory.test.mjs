@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {createMetadataMemory} from './metadata-memory.mjs';
+const data=new Map();const storage={getItem:k=>data.get(k),setItem:(k,v)=>data.set(k,v)};let time=1000;
+const options={storage,now:()=>time,ttl:100,limit:2};const url='https://radio.example.com/live';
+let m=createMetadataMemory(options);m.success(url,'icy');assert.equal(m.get(url),'icy');
+m=createMetadataMemory(options);assert.equal(m.get(url),'icy');
+for(let i=0;i<3;i++)m.failure(url,'icy');assert.equal(m.get(url),null);
+m.success(url,'icecast-chat-json');time+=101;assert.equal(m.get(url),null);
+m.success(url,'invalid');assert.equal(m.get(url),null);
+m.success(url,'icy');m.clear();assert.equal(createMetadataMemory(options).get(url),null);
+console.log('Metadata memory fixtures passed');
