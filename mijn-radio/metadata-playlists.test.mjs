@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {playlistEntries,resolvePlaylist} from './metadata-playlists.mjs';
+const base='https://radio.example.com/list.pls';
+assert.deepEqual(playlistEntries('[playlist]\nFile1=https://radio.example.com/live\nTitle1=Radio\nNumberOfEntries=1',base),['https://radio.example.com/live']);
+assert.deepEqual(playlistEntries('#EXTM3U\n#EXTINF:-1,Radio\n/live',base),['https://radio.example.com/live']);
+assert.deepEqual(playlistEntries('#EXTM3U\n#EXT-X-TARGETDURATION:6\n/segment.ts',base),[]);
+assert.deepEqual(playlistEntries('http://radio.example.com/live',base),[]);
+assert.equal(await resolvePlaylist(base,{approve:async u=>u.startsWith('https://radio.example.com/'),fetcher:async()=>new Response('File1=https://radio.example.com/live')}),'https://radio.example.com/live');
+assert.equal(await resolvePlaylist(base,{approve:async u=>u===base,fetcher:async()=>new Response('File1=https://other.example.com/live')}),null);
+console.log('Playlist fixtures passed');
