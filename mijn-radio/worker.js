@@ -3,7 +3,7 @@ function candidatesFrom(text,base){const found=new Set();const decoded=text.repl
 async function icyNowPlaying(streamUrl){
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10500);let reader;
  try{
-  const response=await fetch(streamUrl,{headers:{'Icy-MetaData':'1','Accept':'*/*'},redirect:'manual',signal:controller.signal});
+  const response=await fetch(streamUrl,{headers:{'Icy-MetaData':'1','Accept':'*/*'},redirect:'follow',signal:controller.signal});
   if(!response.ok||!response.body)throw Error('Stream niet bereikbaar');
   const interval=Number(response.headers.get('icy-metaint'));
   if(!Number.isInteger(interval)||interval<1||interval>262144)return {status:'unsupported',source:'icy',code:'icy_header_missing',message:'Deze stream biedt geen ICY-metadatablokken aan.'};
@@ -35,15 +35,15 @@ async function icyNowPlaying(streamUrl){
  }finally{clearTimeout(timer);try{await reader?.cancel()}catch{}}
 }
 // Generic metadata adapters. Only probe the already-verified stream origin; never follow redirects.
-async function jsonFromOrigin(url){const r=await fetch(url,{headers:{Accept:'application/json'},redirect:'manual',signal:AbortSignal.timeout(8000)});if(!r.ok||r.status>=300||!String(r.headers.get('content-type')||'').includes('json'))return null;const body=await r.text();if(body.length>90000)return null;try{return JSON.parse(body)}catch{return null}}
+async function jsonFromOrigin(url){const r=await fetch(url,{headers:{Accept:'application/json'},redirect:'manual',signal:AbortSignal.timeout(2200)});if(!r.ok||r.status>=300||!String(r.headers.get('content-type')||'').includes('json'))return null;const body=await r.text();if(body.length>90000)return null;try{return JSON.parse(body)}catch{return null}}
 function cleanTitle(value){return typeof value==='string'&&value.trim()&&value.trim().length<250?value.trim():null}
-function icecastTitle(json,mount){const sources=json?.icestats?.source;if(!sources)return null;const list=Array.isArray(sources)?sources:[sources];const match=list.find(x=>{try{return new URL(x.listenurl).pathname===mount}catch{return false}});if(!match)return null;const title=cleanTitle(match.title)||cleanTitle(match.yp_currently_playing)||cleanTitle([match.artist,match.song].filter(Boolean).join(' - '));return title?{title,listeners:Number.isFinite(Number(match.listeners))&&match.listeners!=null?Number(match.listeners):null,bitrate:Number(match.bitrate)||null}:null}
+function icecastTitle(json,mount){const sources=json?.icestats?.source;if(!sources)return null;const list=Array.isArray(sources)?sources:[sources];const match=list.find(x=>{try{return new URL(x.listenurl).pathname===mount}catch{return false}});if(!match)return null;return cleanTitle(match.title)||cleanTitle([match.artist,match.song].filter(Boolean).join(' - '))}
 async function alternateNowPlaying(streamUrl){const stream=new URL(streamUrl);if(!['https:'].includes(stream.protocol)||stream.username||stream.password)return null;const origin=stream.origin;
  // Restrict probes to the exact origin of the verified stream, on standard TLS port only.
- // Icecast status is also available on verified nonstandard radio ports.
+ if(stream.port&&stream.port!=='443')return null;
  const ice=await jsonFromOrigin(origin+'/status-json.xsl').catch(()=>null);
  const iceTitle=icecastTitle(ice,stream.pathname);
- if(iceTitle)return {status:'ok',source:'icecast-json',...iceTitle};
+ if(iceTitle)return {status:'ok',source:'icecast-json',title:iceTitle};
  const shout=await jsonFromOrigin(origin+'/stats?sid=1&json=1').catch(()=>null);
  const shoutTitle=cleanTitle(shout?.songtitle||shout?.songTitle);
  if(shoutTitle)return {status:'ok',source:'shoutcast-stats',title:shoutTitle};
@@ -70,21 +70,7 @@ async function verifyPublicStream(url){
   return ok;
  }catch{return false}finally{clearTimeout(timer)}
 }
-// Exact RadioCarousel Chat metadata extraction, restricted to its known stream.
-async function chatStyleMetadata(streamUrl){
- const stream=new URL(streamUrl);
- const data=await jsonFromOrigin(stream.origin+'/status-json.xsl');
- if(!data||typeof data!=='object')return null;
- const source=Array.isArray(data.icestats?.source)?data.icestats.source.find(item=>{try{return new URL(item.listenurl).pathname===stream.pathname}catch{return false}}):data.icestats?.source;
- if(data.icestats?.source&&!source)return null;
- if(source?.listenurl){try{if(new URL(source.listenurl).pathname!==stream.pathname)return null}catch{return null}}
- const title=[source?.title,source?.yp_currently_playing,data.song,data.title,data.now_playing?.song?.text].map(cleanTitle).find(Boolean);
- if(!title)return null;
- const listeners=source?.listeners??data.icestats?.listeners??data.listeners;
- return {status:'ok',source:'icecast-chat-parser',title,listeners:listeners!=null&&Number.isFinite(Number(listeners))?Number(listeners):null,bitrate:Number(source?.bitrate??data.bitrate)||null,metadataCheck:'preferred-source'};
-}
 async function metadataResponse(request){try{const params=new URL(request.url).searchParams,candidate=params.get('url'),id=params.get('id');if(!candidate||candidate.length>1800)return Response.json({status:'unavailable',message:'Geen stream geselecteerd.'},{status:400});const target=new URL(candidate);if(target.protocol!=='https:'||target.username||target.password)return Response.json({status:'unsupported',message:'Deze stream is niet geschikt voor veilige HTTPS-metadata-uitlezing.'});const safe=safeStreamUrl(candidate);if(!safe)return Response.json({status:'unsupported',stage:'verification',verified:false,code:'unsafe_url',message:'Gebruik een publieke HTTPS-radiostream.'},{headers:{'cache-control':'no-store'}});
-if(safe.href==='https://cast.accessweb.be:3245/stream'){const preferred=await chatStyleMetadata(safe.href).catch(()=>null);if(preferred)return Response.json({...preferred,stage:'metadata',verified:true,code:'ok'},{headers:{'cache-control':'no-store'}})}
 let approved=false,verifiedUrl=safe.href,reason='not_verified';
 if(id&&/^[0-9a-f-]{36}$/i.test(id)){
  for(const host of ['https://de1.api.radio-browser.info','https://nl1.api.radio-browser.info']){
@@ -94,5 +80,5 @@ if(id&&/^[0-9a-f-]{36}$/i.test(id)){
 if(!approved){const check=await isListedStream(safe.href);approved=check.ok;reason=check.error||reason}
 if(!approved){approved=await verifyPublicStream(safe.href);if(approved)reason='public_stream_probe'}
 if(!approved)return Response.json({status:'unsupported',stage:'verification',verified:false,code:reason,message:'Stream kon niet veilig als publieke audiostream worden bevestigd. Muziek afspelen blijft mogelijk.'},{headers:{'cache-control':'no-store'}});
-try{const preferred=await chatStyleMetadata(verifiedUrl).catch(()=>null);if(preferred)return Response.json({...preferred,stage:'metadata',verified:true,code:'ok'},{headers:{'cache-control':'no-store'}});let result;try{result=await icyNowPlaying(verifiedUrl)}catch(e){result={status:'unavailable',source:'icy',code:e?.name==='AbortError'?'timeout':'stream_unreachable',message:'De stream kon niet door de metadataserver worden gelezen.'}}const alternative=await alternateNowPlaying(verifiedUrl).catch(()=>null);if(alternative){if(result.status!=='ok')result={...alternative,metadataCheck:'fallback'};else{const normalize=s=>s.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();result={...result,listeners:alternative.listeners??null,bitrate:alternative.bitrate??null,metadataCheck:normalize(result.title)===normalize(alternative.title)?'confirmed':'different',secondarySource:alternative.source,secondaryTitle:alternative.title}}}else result={...result,metadataCheck:'single-source'};return Response.json({...result,stage:'metadata',verified:true,code:result.code||result.status},{headers:{'cache-control':'no-store'}})}catch(e){const reason=e?.name==='AbortError'?'timeout':String(e?.message||'').includes('Stream niet bereikbaar')?'stream_unreachable':'stream_request_failed';return Response.json({status:'unavailable',stage:'metadata',verified:true,code:reason,message:'Metadata kon niet worden gelezen ('+reason+'). Audio blijft beschikbaar.'},{headers:{'cache-control':'no-store'}})}}catch{return Response.json({status:'unavailable',message:'Metadata tijdelijk niet beschikbaar.'},{headers:{'cache-control':'no-store'}})}}
+try{let result;try{result=await icyNowPlaying(verifiedUrl)}catch(e){result={status:'unavailable',source:'icy',code:e?.name==='AbortError'?'timeout':'stream_unreachable',message:'De stream kon niet door de metadataserver worden gelezen.'}}if(result.status!=='ok'){const alternative=await alternateNowPlaying(verifiedUrl).catch(()=>null);if(alternative)result=alternative;}return Response.json({...result,stage:'metadata',verified:true,code:result.code||result.status},{headers:{'cache-control':'no-store'}})}catch(e){const reason=e?.name==='AbortError'?'timeout':String(e?.message||'').includes('Stream niet bereikbaar')?'stream_unreachable':'stream_request_failed';return Response.json({status:'unavailable',stage:'metadata',verified:true,code:reason,message:'Metadata kon niet worden gelezen ('+reason+'). Audio blijft beschikbaar.'},{headers:{'cache-control':'no-store'}})}}catch{return Response.json({status:'unavailable',message:'Metadata tijdelijk niet beschikbaar.'},{headers:{'cache-control':'no-store'}})}}
 export default {async fetch(request,env){const url=new URL(request.url);if(url.pathname==='/api/metadata' || url.pathname==='/api/radiocarousel-metadata')return metadataResponse(request);if(url.pathname!=='/api/radiocarousel-diagnose')return env.ASSETS.fetch(request);try{const response=await fetch(SOURCE,{headers:{'User-Agent':'Mozilla/5.0 (compatible; MijnRadio/1.7)','Accept':'text/html'},redirect:'follow',signal:AbortSignal.timeout(9000)});if(!response.ok)throw Error('Bronpagina niet beschikbaar');const html=(await response.text()).slice(0,1000000);const results=candidatesFrom(html,SOURCE);return new Response(JSON.stringify({results,source:SOURCE,notice:results.length?'Mogelijke streams uit de openbare pagina; nog niet geverifieerd.':'Geen directe stream zichtbaar in de openbare HTML. Een dynamische player kan deze later laden.'}),{headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}})}catch{return new Response(JSON.stringify({results:[],notice:'Serveronderzoek kon de luisterpagina niet uitlezen.'}),{headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'},status:502})}}};
