@@ -22,3 +22,5 @@ await import('./metadata-engine.test.mjs');
 await import('./metadata-playlists.test.mjs');
 
 await import('./metadata-hls.test.mjs');
+
+await import('./metadata-ogg.test.mjs');
