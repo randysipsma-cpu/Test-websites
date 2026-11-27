@@ -18,3 +18,5 @@ console.log('Mijn Radio: syntax, UI references, favorites, discover and playback
 await import('./metadata-adapters.test.mjs');
 
 await import('./metadata-engine.test.mjs');
+
+await import('./metadata-playlists.test.mjs');
