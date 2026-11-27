@@ -20,3 +20,5 @@ await import('./metadata-adapters.test.mjs');
 await import('./metadata-engine.test.mjs');
 
 await import('./metadata-playlists.test.mjs');
+
+await import('./metadata-hls.test.mjs');
