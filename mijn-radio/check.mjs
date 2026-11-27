@@ -26,3 +26,5 @@ await import('./metadata-hls.test.mjs');
 await import('./metadata-ogg.test.mjs');
 
 await import('./metadata-station-api.test.mjs');
+
+await import('./metadata-memory.test.mjs');
