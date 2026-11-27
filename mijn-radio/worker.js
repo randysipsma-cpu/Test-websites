@@ -7,10 +7,10 @@ import {discoverMetadata} from './metadata-engine.mjs';
 const SOURCE='https://www.radioviainternet.nl/radiocarousel';
 function candidatesFrom(text,base){const found=new Set();const decoded=text.replaceAll('\\/','/').replaceAll('&amp;','&');const urls=decoded.match(/https?:[^\s"'<>\\]+/gi)||[];for(const raw of urls){try{const u=new URL(raw.replace(/[),;]+$/,''),base);if(u.protocol!=='https:')continue;if(/\.(mp3|aac|ogg|m3u8?|pls)(?:[?#]|$)|\/(stream|listen|live)(?:[/?#]|$)/i.test(u.href))found.add(u.href)}catch{}}return [...found].slice(0,20)}
 async function fetchRadioRedirects(url,options){const initial=safeStreamUrl(url);if(!initial)throw Error('unsafe_url');let target=initial;for(let i=0;i<4;i++){const r=await fetch(target.href,{...options,redirect:'manual'});if(![301,302,303,307,308].includes(r.status))return r;const location=r.headers.get('location');void r.body?.cancel().catch(()=>{});if(!location)throw Error('redirect_missing');const next=safeStreamUrl(new URL(location,target).href);if(!next)throw Error('redirect_unsafe');if(next.origin!==initial.origin){const allowed=['qmusic.nl','qmusic.be','q-music.nl','q-music.be','dpgmedia.net','dpgmedia.be','streamtheworld.com'];const trusted=h=>allowed.some(d=>h===d||h.endsWith('.'+d));const qmusicRedirect=initial.hostname==='icecast-qmusicnl-cdp.triple-it.nl'&&next.hostname==='audio-streaming.qmusic.nl';if((!qmusicRedirect&&(!trusted(initial.hostname)||!trusted(next.hostname)))||next.port)throw Error('redirect_cross_origin:'+initial.hostname+' -> '+next.hostname);}target=next}throw Error('redirect_limit')}
-async function icyNowPlaying(streamUrl){
+async function icyNowPlaying(streamUrl,openedResponse=null){
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10500);let reader;
  try{
-  const response=await fetchRadioRedirects(streamUrl,{headers:{'Icy-MetaData':'1','Accept':'*/*'},redirect:'manual',signal:controller.signal});
+  const response=openedResponse||await fetchRadioRedirects(streamUrl,{headers:{'Icy-MetaData':'1','Accept':'*/*'},redirect:'manual',signal:controller.signal});
   if(!response.ok||!response.body)throw Error('Stream niet bereikbaar');
   const interval=Number(response.headers.get('icy-metaint'));
   if(!Number.isInteger(interval)||interval<1||interval>262144)return {status:'unsupported',source:'icy',code:'icy_header_missing',message:'Deze stream biedt geen ICY-metadatablokken aan.'};
@@ -88,10 +88,17 @@ if(!approved){approved=await verifyPublicStream(safe.href);if(approved)reason='p
 if(!approved)return Response.json({status:'unsupported',stage:'verification',verified:false,code:reason,message:'Stream kon niet veilig als publieke audiostream worden bevestigd. Muziek afspelen blijft mogelijk.'},{headers:{'cache-control':'no-store'}});
 try{
 // Prefer fast status endpoints before expensive stream reads.
+let detectedHeaders={};
+let probe;
+const probeController=new AbortController();
+const probeTimer=setTimeout(()=>probeController.abort(),8500);
+try{
+probe=await fetchRadioRedirects(verifiedUrl,{headers:{'Icy-MetaData':'1','Accept':'*/*'},signal:probeController.signal});
+if(probe.ok){detectedHeaders=Object.fromEntries(probe.headers);const final=safeStreamUrl(probe.url);if(final)verifiedUrl=final.href;
+if(Number(detectedHeaders['icy-metaint'])>0){const direct=await icyNowPlaying(verifiedUrl,probe);if(direct.status==='ok')return Response.json({...direct,stage:'metadata',verified:true,code:'ok'},{headers:{'cache-control':'no-store'}});}}
+}catch{}finally{clearTimeout(probeTimer);if(probe?.body&&!probe.body.locked)void probe.body.cancel().catch(()=>{});}
 const fast=await alternateNowPlaying(verifiedUrl).catch(()=>null);
 if(fast?.status==='ok'&&fast.title)return Response.json({...fast,stage:'metadata',verified:true,code:'ok'},{headers:{'cache-control':'no-store'}});
-let detectedHeaders={};
-try{const probe=await fetch(verifiedUrl,{headers:{'Icy-MetaData':'1','Accept':'*/*'},redirect:'manual',signal:AbortSignal.timeout(2500)});if(probe.ok)detectedHeaders=Object.fromEntries(probe.headers);void probe.body?.cancel().catch(()=>{});}catch{}
 const sameOrigin=u=>{const s=safeStreamUrl(u);return !!s&&s.origin===safe.origin};
 async function boundedRead(u,max){if(!sameOrigin(u))return null;const r=await fetch(u,{redirect:'manual',signal:AbortSignal.timeout(1800)});if(!r.ok||!r.body)return null;const reader=r.body.getReader();const out=new Uint8Array(max);let n=0;try{while(n<max){const c=await reader.read();if(c.done)break;const part=c.value.subarray(0,max-n);out.set(part,n);n+=part.length}return out.subarray(0,n)}finally{void reader.cancel().catch(()=>{})}}
 let extra=null;
