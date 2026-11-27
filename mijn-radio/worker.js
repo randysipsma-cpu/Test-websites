@@ -1,3 +1,6 @@
+import {resolvePlaylist} from './metadata-playlists.mjs';
+import {extractOggMetadata} from './metadata-ogg.mjs';
+import {hlsReferences,parseTimedId3} from './metadata-hls.mjs';
 import {discoverMetadata} from './metadata-engine.mjs';
 const SOURCE='https://www.radioviainternet.nl/radiocarousel';
 function candidatesFrom(text,base){const found=new Set();const decoded=text.replaceAll('\\/','/').replaceAll('&amp;','&');const urls=decoded.match(/https?:[^\s"'<>\\]+/gi)||[];for(const raw of urls){try{const u=new URL(raw.replace(/[),;]+$/,''),base);if(u.protocol!=='https:')continue;if(/\.(mp3|aac|ogg|m3u8?|pls)(?:[?#]|$)|\/(stream|listen|live)(?:[/?#]|$)/i.test(u.href))found.add(u.href)}catch{}}return [...found].slice(0,20)}
@@ -84,6 +87,15 @@ if(!approved)return Response.json({status:'unsupported',stage:'verification',ver
 try{
 let detectedHeaders={};
 try{const probe=await fetch(verifiedUrl,{headers:{'Icy-MetaData':'1','Accept':'*/*'},redirect:'manual',signal:AbortSignal.timeout(2500)});if(probe.ok)detectedHeaders=Object.fromEntries(probe.headers);void probe.body?.cancel().catch(()=>{});}catch{}
+const sameOrigin=u=>{const s=safeStreamUrl(u);return !!s&&s.origin===safe.origin};
+async function boundedRead(u,max){if(!sameOrigin(u))return null;const r=await fetch(u,{redirect:'manual',signal:AbortSignal.timeout(1800)});if(!r.ok||!r.body)return null;const reader=r.body.getReader();const out=new Uint8Array(max);let n=0;try{while(n<max){const c=await reader.read();if(c.done)break;const part=c.value.subarray(0,max-n);out.set(part,n);n+=part.length}return out.subarray(0,n)}finally{void reader.cancel().catch(()=>{})}}
+let extra=null;
+try{
+if(/\.(m3u|pls)(?:\?|$)/i.test(verifiedUrl)){const resolved=await resolvePlaylist(verifiedUrl,{approve:async u=>sameOrigin(u),fetcher:async u=>{const bytes=await boundedRead(u,65536);return new Response(bytes,{status:bytes?200:404})}});if(resolved&&resolved!==verifiedUrl&&await verifyPublicStream(resolved)){verifiedUrl=resolved;detectedHeaders={}}}
+if(/ogg|opus/i.test(detectedHeaders['content-type']||'')||/\.(ogg|opus)(?:\?|$)/i.test(verifiedUrl)){const bytes=await boundedRead(verifiedUrl,262144);if(bytes)extra=extractOggMetadata(bytes)}
+if(/mpegurl/i.test(detectedHeaders['content-type']||'')||/\.m3u8(?:\?|$)/i.test(verifiedUrl)){let bytes=await boundedRead(verifiedUrl,65536);let refs=bytes&&hlsReferences(new TextDecoder().decode(bytes),verifiedUrl);const variant=refs?.variants.find(sameOrigin);if(variant){bytes=await boundedRead(variant,65536);refs=bytes&&hlsReferences(new TextDecoder().decode(bytes),variant)}const segment=refs?.segments.filter(sameOrigin).pop();if(segment){bytes=await boundedRead(segment,262144);if(bytes)extra=parseTimedId3(bytes)}}
+}catch{}
+if(extra?.title)return Response.json({...extra,status:'ok',stage:'metadata',verified:true,code:'ok'},{headers:{'cache-control':'no-store'}});
 const adaptive=await discoverMetadata(verifiedUrl,detectedHeaders,{icyReader:icyNowPlaying,timeout:1800}).catch(()=>null);
 if(adaptive?.status==='ok')return Response.json({...adaptive,stage:'metadata',verified:true,code:'ok'},{headers:{'cache-control':'no-store'}});
 let result;try{result=await icyNowPlaying(verifiedUrl)}catch(e){result={status:'unavailable',source:'icy',code:e?.name==='AbortError'?'timeout':'stream_unreachable',message:'De stream kon niet door de metadataserver worden gelezen.'}}if(result.status!=='ok'){const alternative=await alternateNowPlaying(verifiedUrl).catch(()=>null);if(alternative)result=alternative;}return Response.json({...result,stage:'metadata',verified:true,code:result.code||result.status},{headers:{'cache-control':'no-store'}})}catch(e){const reason=e?.name==='AbortError'?'timeout':String(e?.message||'').includes('Stream niet bereikbaar')?'stream_unreachable':'stream_request_failed';return Response.json({status:'unavailable',stage:'metadata',verified:true,code:reason,message:'Metadata kon niet worden gelezen ('+reason+'). Audio blijft beschikbaar.'},{headers:{'cache-control':'no-store'}})}}catch{return Response.json({status:'unavailable',message:'Metadata tijdelijk niet beschikbaar.'},{headers:{'cache-control':'no-store'}})}}
