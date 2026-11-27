@@ -35,7 +35,7 @@ async function icyNowPlaying(streamUrl){
  }finally{clearTimeout(timer);try{await reader?.cancel()}catch{}}
 }
 // Generic metadata adapters. Only probe the already-verified stream origin; never follow redirects.
-async function jsonFromOrigin(url){const r=await fetch(url,{headers:{Accept:'application/json'},redirect:'manual',signal:AbortSignal.timeout(2200)});if(!r.ok||r.status>=300||!String(r.headers.get('content-type')||'').includes('json'))return null;const body=await r.text();if(body.length>90000)return null;try{return JSON.parse(body)}catch{return null}}
+async function jsonFromOrigin(url){const r=await fetch(url,{headers:{Accept:'application/json'},redirect:'manual',signal:AbortSignal.timeout(8000)});if(!r.ok||r.status>=300||!String(r.headers.get('content-type')||'').includes('json'))return null;const body=await r.text();if(body.length>90000)return null;try{return JSON.parse(body)}catch{return null}}
 function cleanTitle(value){return typeof value==='string'&&value.trim()&&value.trim().length<250?value.trim():null}
 function icecastTitle(json,mount){const sources=json?.icestats?.source;if(!sources)return null;const list=Array.isArray(sources)?sources:[sources];const match=list.find(x=>{try{return new URL(x.listenurl).pathname===mount}catch{return false}});if(!match)return null;const title=cleanTitle(match.title)||cleanTitle(match.yp_currently_playing)||cleanTitle([match.artist,match.song].filter(Boolean).join(' - '));return title?{title,listeners:Number.isFinite(Number(match.listeners))&&match.listeners!=null?Number(match.listeners):null,bitrate:Number(match.bitrate)||null}:null}
 async function alternateNowPlaying(streamUrl){const stream=new URL(streamUrl);if(!['https:'].includes(stream.protocol)||stream.username||stream.password)return null;const origin=stream.origin;
@@ -70,7 +70,18 @@ async function verifyPublicStream(url){
   return ok;
  }catch{return false}finally{clearTimeout(timer)}
 }
+// Exact RadioCarousel Chat metadata extraction, restricted to its known stream.
+async function carouselChatMetadata(){
+ const data=await jsonFromOrigin('https://cast.accessweb.be:3245/status-json.xsl');
+ if(!data||typeof data!=='object')return null;
+ const source=Array.isArray(data.icestats?.source)?data.icestats.source.find(item=>String(item.listenurl||'').includes('/stream'))||data.icestats.source[0]:data.icestats?.source;
+ const title=[source?.title,source?.yp_currently_playing,data.song,data.title,data.now_playing?.song?.text].map(cleanTitle).find(Boolean);
+ if(!title)return null;
+ const listeners=source?.listeners??data.icestats?.listeners??data.listeners;
+ return {status:'ok',source:'radiocarousel-chat',title,listeners:listeners!=null&&Number.isFinite(Number(listeners))?Number(listeners):null,bitrate:Number(source?.bitrate??data.bitrate)||null,metadataCheck:'preferred-source'};
+}
 async function metadataResponse(request){try{const params=new URL(request.url).searchParams,candidate=params.get('url'),id=params.get('id');if(!candidate||candidate.length>1800)return Response.json({status:'unavailable',message:'Geen stream geselecteerd.'},{status:400});const target=new URL(candidate);if(target.protocol!=='https:'||target.username||target.password)return Response.json({status:'unsupported',message:'Deze stream is niet geschikt voor veilige HTTPS-metadata-uitlezing.'});const safe=safeStreamUrl(candidate);if(!safe)return Response.json({status:'unsupported',stage:'verification',verified:false,code:'unsafe_url',message:'Gebruik een publieke HTTPS-radiostream.'},{headers:{'cache-control':'no-store'}});
+if(safe.href==='https://cast.accessweb.be:3245/stream'){const preferred=await carouselChatMetadata().catch(()=>null);if(preferred)return Response.json({...preferred,stage:'metadata',verified:true,code:'ok'},{headers:{'cache-control':'no-store'}})}
 let approved=false,verifiedUrl=safe.href,reason='not_verified';
 if(id&&/^[0-9a-f-]{36}$/i.test(id)){
  for(const host of ['https://de1.api.radio-browser.info','https://nl1.api.radio-browser.info']){
