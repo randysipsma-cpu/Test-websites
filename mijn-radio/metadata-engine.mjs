@@ -1,10 +1,10 @@
 import {metadataPlan,parseIcecast,parseShoutcast,parseShoutcastV1,parseAzuraCast} from './metadata-adapters.mjs';
 const parsers={'icecast-chat-json':parseIcecast,'shoutcast-v2':parseShoutcast,'shoutcast-v1':parseShoutcastV1,'azuracast-nowplaying':parseAzuraCast};
 const preferred=new Map();
-export async function discoverMetadata(url,headers,{fetcher=fetch,icyReader,timeout=2500}={}){
+export async function discoverMetadata(url,headers,{fetcher=fetch,icyReader,timeout=2500,hint}={}){
  const plan=metadataPlan(url,headers),attempts=[];
  const methods=[...plan.methods];
- const remembered=preferred.get(url);
+ const remembered=preferred.get(url)||hint;
  if(remembered&&methods.includes(remembered)){methods.splice(methods.indexOf(remembered),1);methods.unshift(remembered)}
  for(const method of methods){
   try{
