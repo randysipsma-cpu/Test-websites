@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {discoverMetadata} from './metadata-engine.mjs';
+const url='https://radio.example.com:3245/stream';
+let calls=[];
+const fetcher=async u=>{calls.push(u);return new Response(JSON.stringify({icestats:{source:{listenurl:url,title:'Artist - Track'}}}),{headers:{'content-type':'application/json'}})};
+let r=await discoverMetadata(url,{'server':'Icecast'},{fetcher});
+assert.equal(r.title,'Artist - Track');assert.equal(calls.length,1);
+const other='https://other.example.com/stream/2';
+calls=[];
+r=await discoverMetadata(other,{'server':'SHOUTcast'},{fetcher:async u=>{calls.push(u);return new Response('',{status:404})},icyReader:async()=>({status:'ok',title:'Fallback - Song',source:'icy'})});
+assert.equal(r.title,'Fallback - Song');assert.ok(calls[0].includes('sid=2'));assert.ok(!calls.some(u=>u.endsWith('/7.html')));
+calls=[];
+r=await discoverMetadata(other,{'server':'SHOUTcast'},{fetcher:async u=>{calls.push(u);throw Error('unexpected')},icyReader:async()=>({status:'ok',title:'Next - Song'})});
+assert.equal(r.title,'Next - Song');assert.equal(calls.length,0);
+r=await discoverMetadata('https://empty.example.com/live',{}, {fetcher:async()=>new Response('',{status:404}),icyReader:async()=>({status:'unavailable'})});
+assert.equal(r.status,'unavailable');
+console.log('Metadata engine fallback and cache fixtures passed');
