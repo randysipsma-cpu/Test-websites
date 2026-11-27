@@ -30,3 +30,12 @@ await import('./metadata-station-api.test.mjs');
 await import('./metadata-memory.test.mjs');
 
 await import('./metadata-icy.test.mjs');
+
+for(const [,id] of html.matchAll(/getElementById\(['"]([^'"]+)['"]\)/g))assert.ok(ids.has(id),'Missing direct DOM reference: '+id);
+for(const id of ['proTheme','proAccent','proFolder','proFolderAdd','proConnection','proMusicSummary','proStatsPeriod','proAnalytics','proDiagRefresh'])assert.ok(ids.has(id),'Professional UI missing: '+id);
+assert.match(html,/const STATS_KEY=['"]mijn-radio-stats-v1['"]/);
+const backupKeys=html.match(/const BACKUP_KEYS=\[([^\]]+)\]/)?.[1]||'';
+for(const key of ['mijn-radio-pro-folders-v1','mijn-radio-pro-appearance-v1','mijn-radio-stats-v1'])assert.ok(backupKeys.includes(key),'Backup missing '+key);
+assert.ok(html.includes("state:x.state||''"),'Regional station data missing');
+assert.ok(html.includes("Object.prototype.hasOwnProperty.call(data.preferences,key)"),'Legacy backup compatibility missing');
+console.log('Professional Edition: DOM references, analytics persistence, regional data and backup wiring passed.');
