@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {parseTimedId3,hlsReferences} from './metadata-hls.mjs';
+const frame=(id,text)=>{const p=Buffer.concat([Buffer.from([3]),Buffer.from(text)]);const h=Buffer.alloc(10);h.write(id);h.writeUInt32BE(p.length,4);return Buffer.concat([h,p])};
+const frames=Buffer.concat([frame('TPE1','Artist'),frame('TIT2','Song')]);
+const header=Buffer.from([73,68,51,3,0,0,0,0,0,frames.length]);
+assert.equal(parseTimedId3(Buffer.concat([header,frames])).title,'Artist - Song');
+assert.equal(parseTimedId3(new Uint8Array(3)),null);
+assert.equal(parseTimedId3(header),null);
+assert.deepEqual(hlsReferences('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=128000\naudio.m3u8','https://radio.example.com/live.m3u8').variants,['https://radio.example.com/audio.m3u8']);
+assert.deepEqual(hlsReferences('#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nseg.aac','https://radio.example.com/live.m3u8').segments,['https://radio.example.com/seg.aac']);
+assert.equal(hlsReferences('#EXTM3U\n/live','https://radio.example.com/list.m3u'),null);
+console.log('HLS parser fixtures passed');
