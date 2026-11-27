@@ -16,3 +16,5 @@ assert.ok(html.includes("if(tab==='discover'&&!catalog.length)loadCatalog()"),'D
 console.log('Mijn Radio: syntax, UI references, favorites, discover and playback wiring checks passed.');
 
 await import('./metadata-adapters.test.mjs');
+
+await import('./metadata-engine.test.mjs');
