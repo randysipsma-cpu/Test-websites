@@ -1,0 +1,1 @@
+export function parseIcyBlock(bytes){let raw=new TextDecoder().decode(bytes).replace(/\0+$/g,'');if(raw.includes('\ufffd'))raw=new TextDecoder('windows-1252').decode(bytes).replace(/\0+$/g,'');const match=raw.match(/(?:^|;)\s*StreamTitle\s*=\s*(['"])([\s\S]*?)\1\s*(?:;|$)/i);return {raw:raw.slice(0,512),title:match?.[2]?.trim().slice(0,250)||null}}
