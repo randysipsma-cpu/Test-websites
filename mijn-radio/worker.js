@@ -46,7 +46,7 @@ function cleanTitle(value){return typeof value==='string'&&value.trim()&&value.t
 function icecastTitle(json,mount){const sources=json?.icestats?.source;if(!sources)return null;const list=Array.isArray(sources)?sources:[sources];const match=list.find(x=>{try{return new URL(x.listenurl).pathname===mount}catch{return false}});if(!match)return null;return cleanTitle(match.title)||cleanTitle([match.artist,match.song].filter(Boolean).join(' - '))}
 async function alternateNowPlaying(streamUrl){const stream=new URL(streamUrl);if(!['https:'].includes(stream.protocol)||stream.username||stream.password)return null;const origin=stream.origin;
  // Restrict probes to the exact origin of the verified stream, on standard TLS port only.
- if(stream.port&&stream.port!=='443'&&stream.origin!=='https://cast.accessweb.be:3245')return null;
+ if(stream.port&&stream.port!=='443')return null;
  const ice=await jsonFromOrigin(origin+'/status-json.xsl').catch(()=>null);
  const iceTitle=icecastTitle(ice,stream.pathname);
  if(iceTitle)return {status:'ok',source:'icecast-json',title:iceTitle};
@@ -87,12 +87,6 @@ if(!approved){const check=await isListedStream(safe.href);approved=check.ok;reas
 if(!approved){approved=await verifyPublicStream(safe.href);if(approved)reason='public_stream_probe'}
 if(!approved)return Response.json({status:'unsupported',stage:'verification',verified:false,code:reason,message:'Stream kon niet veilig als publieke audiostream worden bevestigd. Muziek afspelen blijft mogelijk.'},{headers:{'cache-control':'no-store'}});
 try{
-// Radio Carousel publishes status on its original TLS port; try the exact mount first.
-if(safe.href==='https://cast.accessweb.be:3245/stream'){
- const ice=await jsonFromOrigin('https://cast.accessweb.be:3245/status-json.xsl').catch(()=>null);
- const title=icecastTitle(ice,safe.pathname);
- if(title)return Response.json({status:'ok',source:'icecast-json',title,stage:'metadata',verified:true,code:'ok'},{headers:{'cache-control':'no-store'}});
-}
 // Prefer fast status endpoints before expensive stream reads.
 let detectedHeaders={};
 let probe;
