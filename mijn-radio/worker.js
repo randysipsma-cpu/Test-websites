@@ -1,3 +1,4 @@
+import {readStationApi} from './metadata-station-api.mjs';
 import {resolvePlaylist} from './metadata-playlists.mjs';
 import {extractOggMetadata} from './metadata-ogg.mjs';
 import {hlsReferences,parseTimedId3} from './metadata-hls.mjs';
@@ -96,6 +97,10 @@ if(/ogg|opus/i.test(detectedHeaders['content-type']||'')||/\.(ogg|opus)(?:\?|$)/
 if(/mpegurl/i.test(detectedHeaders['content-type']||'')||/\.m3u8(?:\?|$)/i.test(verifiedUrl)){let bytes=await boundedRead(verifiedUrl,65536);let refs=bytes&&hlsReferences(new TextDecoder().decode(bytes),verifiedUrl);const variant=refs?.variants.find(sameOrigin);if(variant){bytes=await boundedRead(variant,65536);refs=bytes&&hlsReferences(new TextDecoder().decode(bytes),variant)}const segment=refs?.segments.filter(sameOrigin).pop();if(segment){bytes=await boundedRead(segment,262144);if(bytes)extra=parseTimedId3(bytes)}}
 }catch{}
 if(extra?.title)return Response.json({...extra,status:'ok',stage:'metadata',verified:true,code:'ok'},{headers:{'cache-control':'no-store'}});
+// Only explicitly mapped station APIs; never accept arbitrary API URLs from clients.
+const stationApis=new Map([['https://cast.accessweb.be:3245/stream',{url:'https://cast.accessweb.be:3245/status-json.xsl',format:'icecast'}]]);
+const config=stationApis.get(verifiedUrl);
+if(config&&config.format!=='icecast'){const stationResult=await readStationApi(config,{approve:async u=>u===config.url&&sameOrigin(u)}).catch(()=>null);if(stationResult?.title)return Response.json({...stationResult,stage:'metadata',verified:true,code:'ok'},{headers:{'cache-control':'no-store'}})}
 const adaptive=await discoverMetadata(verifiedUrl,detectedHeaders,{icyReader:icyNowPlaying,timeout:1800,hint:params.get("hint")}).catch(()=>null);
 if(adaptive?.status==='ok')return Response.json({...adaptive,stage:'metadata',verified:true,code:'ok'},{headers:{'cache-control':'no-store'}});
 let result;try{result=await icyNowPlaying(verifiedUrl)}catch(e){result={status:'unavailable',source:'icy',code:e?.name==='AbortError'?'timeout':'stream_unreachable',message:'De stream kon niet door de metadataserver worden gelezen.'}}if(result.status!=='ok'){const alternative=await alternateNowPlaying(verifiedUrl).catch(()=>null);if(alternative)result=alternative;}return Response.json({...result,stage:'metadata',verified:true,code:result.code||result.status},{headers:{'cache-control':'no-store'}})}catch(e){const reason=e?.name==='AbortError'?'timeout':String(e?.message||'').includes('Stream niet bereikbaar')?'stream_unreachable':'stream_request_failed';return Response.json({status:'unavailable',stage:'metadata',verified:true,code:reason,message:'Metadata kon niet worden gelezen ('+reason+'). Audio blijft beschikbaar.'},{headers:{'cache-control':'no-store'}})}}catch{return Response.json({status:'unavailable',message:'Metadata tijdelijk niet beschikbaar.'},{headers:{'cache-control':'no-store'}})}}
