@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {parseOggComments,extractOggMetadata} from './metadata-ogg.mjs';
+const n=v=>{const b=Buffer.alloc(4);b.writeUInt32LE(v);return b};
+const str=s=>Buffer.concat([n(Buffer.byteLength(s)),Buffer.from(s)]);
+const fields=Buffer.concat([str('vendor'),n(3),str('ARTIST=Artist'),str('TITLE=Song'),str('ALBUM=Album')]);
+const opus=Buffer.concat([Buffer.from('OpusTags'),fields]);
+const vorbis=Buffer.concat([Buffer.from([3]),Buffer.from('vorbis'),fields,Buffer.from([1])]);
+assert.equal(parseOggComments(opus).title,'Artist - Song');
+assert.equal(parseOggComments(vorbis).album,'Album');
+assert.equal(parseOggComments(opus.subarray(0,12)),null);
+assert.equal(parseOggComments(Buffer.from('invalid')),null);
+const page=Buffer.alloc(28);page.write('OggS');page[26]=1;page[27]=opus.length;
+assert.equal(extractOggMetadata(Buffer.concat([page,opus])).source,'opus-tags');
+assert.equal(extractOggMetadata(page),null);
+console.log('Ogg metadata fixtures passed');
