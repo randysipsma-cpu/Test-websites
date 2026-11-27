@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {parseIcecast,parseShoutcast,parseShoutcastV1,parseAzuraCast,metadataPlan} from './metadata-adapters.mjs';
+const url='https://radio.example.com:3245/stream';
+assert.equal(parseIcecast({icestats:{source:[{listenurl:'https://radio.example.com:3245/other',title:'Wrong'},{listenurl:url,title:'Artist - Song'}]}},url).title,'Artist - Song');
+assert.equal(parseIcecast({icestats:{source:{listenurl:url,yp_currently_playing:'Artist - Song'}}},url).title,'Artist - Song');
+assert.equal(parseIcecast({icestats:{source:{listenurl:'https://radio.example.com/other',title:'Wrong'}}},url),null);
+assert.equal(parseShoutcast({songtitle:'Artist - Song'}).title,'Artist - Song');
+assert.equal(parseShoutcastV1('<html><body>1,1,10,100,1,128,Artist - Song, remix</body></html>').title,'Artist - Song, remix');
+assert.equal(parseShoutcastV1('<html>Not a stream</html>'),null);
+assert.equal(parseAzuraCast([{station:{mounts:[{url}]},now_playing:{song:{artist:'Artist',title:'Song'}}}],url).title,'Artist - Song');
+assert.equal(metadataPlan(url,{'server':'Icecast','content-type':'audio/mpeg'}).methods[0],'icecast-chat-json');
+assert.equal(metadataPlan('https://radio.example.com/stream/2',{'server':'SHOUTcast'}).endpoints['shoutcast-v2'],'https://radio.example.com/stats?sid=2&json=1');
+assert.equal(metadataPlan('https://radio.example.com/live.m3u8',{}).methods[0],'hls-timed-id3');
+console.log('Metadata adapter fixtures passed');
